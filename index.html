@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>十人十色チャット</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+            background-color: #f0f0f0;
+        }
+        .minecraft-header {
+            background-color: #6fae54;
+            color: white;
+            padding: 20px 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .sub-header {
+            background-color: #333;
+            color: white;
+            padding: 10px 20px;
+            margin-bottom: 10px;
+            border-top: 5px solid #333;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .sub-header .name-display {
+            color: #6fae54;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        .sub-header .name-display:hover {
+            text-decoration: underline;
+        }
+        #chat-window {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            border-radius: 15px;
+            background-color: #ffffff;
+            box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+            max-height: calc(100vh - 300px);
+        }
+        #messages {
+            list-style-type: none;
+            padding: 0;
+            margin: 0;
+        }
+        #messages li {
+            margin-bottom: 10px;
+            padding: 10px;
+            background-color: #f2f2f2;
+            border-radius: 8px;
+        }
+        .message-content {
+            font-size: 16px;
+            color: #333;
+        }
+        .message-details {
+            font-size: 12px;
+            color: #666;
+            margin-top: 5px;
+        }
+        #input-container {
+            display: flex;
+            align-items: center;
+            padding: 10px;
+            background-color: #6fae54;
+            border-bottom-left-radius: 15px;
+            border-bottom-right-radius: 15px;
+            box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
+            position: relative;
+            z-index: 1; /* Ensure input container is above file bar */
+        }
+        #file-upload {
+            display: none;
+        }
+        .custom-file-upload {
+            display: inline-block;
+            padding: 6px 12px;
+            cursor: pointer;
+            border: 1px solid #999;
+            border-radius: 4px;
+            background-color: #eee;
+            margin-right: 10px;
+        }
+        #input {
+            flex: 1;
+            padding: 10px;
+            font-size: 16px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            margin-right: 10px;
+            background-color: #fff;
+        }
+        #send-button {
+            padding: 10px 20px;
+            font-size: 16px;
+            border: none;
+            border-radius: 4px;
+            background-color: #007bff;
+            color: white;
+            cursor: pointer;
+        }
+        #send-button:hover {
+            background-color: #0056b3;
+        }
+        .popup-container {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+        .popup-content {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        .popup-input {
+            margin-bottom: 10px;
+            padding: 8px;
+            font-size: 14px;
+            width: 200px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        .popup-button {
+            padding: 8px 20px;
+            font-size: 14px;
+            border: none;
+            border-radius: 4px;
+            background-color: #007bff;
+            color: white;
+            cursor: pointer;
+        }
+        .popup-button:hover {
+            background-color: #0056b3;
+        }
+    </style>
+</head>
+<body>
+    <div class="minecraft-header">
+        <h1>十人十色チャット</h1>
+    </div>
+    <div class="sub-header">
+        <div class="name-display" id="name-display">無名人です！</div>
+    </div>
+    <div id="chat-window">
+        <ul id="messages"></ul>
+    </div>
+    <div id="input-container">
+        <label for="file-upload" class="custom-file-upload">ファイル選択</label>
+        <input type="file" id="file-upload" accept="image/*">
+        <input id="input" type="text" placeholder="メッセージを入力してください" autocomplete="off" />
+        <button id="send-button">送信</button>
+    </div>
+
+    <div class="popup-container" id="popup-container">
+        <div class="popup-content">
+            <h2>名前を変更する</h2>
+            <input id="popup-name-input" class="popup-input" type="text" placeholder="新しい名前を入力してください" autocomplete="off" maxlength="15" />
+            <button id="popup-set-name-button" class="popup-button">名前を変更する</button>
+        </div>
+    </div>
+
+    <script>
+        // Backend-like logic using WebSocket (Socket.IO)
+        (function() {
+            const io = function() {
+                const events = {};
+                return {
+                    on: function(event, callback) {
+                        events[event] = callback;
+                    },
+                    emit: function(event, data) {
+                        if (events[event]) {
+                            events[event](data);
+                        }
+                    }
+                };
+            };
+
+            const socket = io();
+            let userName = '無名人です！';
+
+            const nameDisplay = document.getElementById('name-display');
+            const input = document.getElementById('input');
+            const messages = document.getElementById('messages');
+            const sendButton = document.getElementById('send-button');
+            const fileUpload = document.getElementById('file-upload');
+            const popupContainer = document.getElementById('popup-container');
+            const popupNameInput = document.getElementById('popup-name-input');
+            const popupSetNameButton = document.getElementById('popup-set-name-button');
+
+            function setUserName(newName) {
+                userName = newName;
+                nameDisplay.textContent = userName;
+                nameDisplay.style.color = '#6fae54';
+            }
+
+            nameDisplay.addEventListener('click', function() {
+                popupNameInput.value = userName;
+                popupContainer.style.display = 'flex';
+            });
+
+            popupSetNameButton.addEventListener('click', function() {
+                const enteredName = popupNameInput.value.trim();
+                if (enteredName !== '') {
+                    if (enteredName.length <= 15) {
+                        setUserName(enteredName);
+                        popupContainer.style.display = 'none';
+                    } else {
+                        alert('名前は15文字以内で入力してください。');
+                    }
+                } else {
+                    alert('名前を入力してください。');
+                }
+            });
+
+            window.addEventListener('load', function() {
+                popupContainer.style.display = 'none';
+            });
+
+            function sendMessage() {
+                if (input.value.trim() !== '') {
+                    const messageContent = input.value.trim();
+                    const timestamp = getCurrentTimestamp();
+                    socket.emit('chat message', { message: messageContent, timestamp: timestamp, sender: userName });
+                    input.value = '';
+                }
+            }
+
+            function getCurrentTimestamp() {
+                const now = new Date();
+                const options = {
+                    year: '2-digit',
+                    month: 'short',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    hour12: false,
+                    timeZone: 'Asia/Tokyo'
+                };
+                return new Intl.DateTimeFormat('ja-JP', options).format(now);
+            }
+
+            input.addEventListener('keypress', function(event) {
+                if (event.key === 'Enter') {
+                    if (!userName) {
+                        alert('名前を設定してください。');
+                    } else {
+                        sendMessage();
+                    }
+                }
+            });
+
+            sendButton.addEventListener('click', function() {
+                if (!userName) {
+                    alert('名前を設定してください。');
+                } else {
+                    sendMessage();
+                }
+            });
+
+            fileUpload.addEventListener('change', function(event) {
+                const file = event.target.files[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        const imageData = e.target.result;
+                        const timestamp = getCurrentTimestamp();
+                        socket.emit('chat image', { image: imageData, timestamp: timestamp, sender: userName });
+                    };
+                    reader.readAsDataURL(file);
+                }
+            });
+
+            socket.on('chat message', function(data) {
+                const { message, timestamp, sender } = data;
+                const item = document.createElement('li');
+
+                const messageWithLinks = message.replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank">$1</a>');
+
+                item.innerHTML = `
+                    <div class="message-details">
+                        <span class="message-sender">${sender}</span>
+                        <span class="message-time">${timestamp}</span>
+                    </div>
+                    <div class="message-content">${messageWithLinks}</div>
+                `;
+                item.classList.add('message-item');
+                messages.appendChild(item);
+                item.scrollIntoView({ behavior: 'smooth', block: 'end' });
+            });
+
+            socket.on('chat image', function(data) {
+                const { image, timestamp, sender } = data;
+                const item = document.createElement('li');
+
+                item.innerHTML = `
+                    <div class="message-details">
+                        <span class="message-sender">${sender}</span>
+                        <span class="message-time">${timestamp}</span>
+                    </div>
+                    <div class="message-content">
+                        <img src="${image}" alt="Image" style="max-width: 100%; border-radius: 8px;">
+                    </div>
+                `;
+                item.classList.add('message-item');
+                messages.appendChild(item);
+                item.scrollIntoView({ behavior: 'smooth', block: 'end' });
+            });
+        })();
+    </script>
+</body>
+</html>
